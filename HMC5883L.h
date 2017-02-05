@@ -1,18 +1,25 @@
-/*
- * To change this license header, choose License Headers in Project Properties.
- * To change this template file, choose Tools | Templates
- * and open the template in the editor.
- */
-
 /* 
  * File:   HMC5883L.h
- * Author: s_nop
+ * Author: Steven Noppe
  *
  * Created on 14 november 2016, 19:44
+ *
+ * Last modified on 25 january 2017
  */
 
 #ifndef HMC5883L_H
 #define HMC5883L_H
+
+#include <linux/i2c-dev.h>	// for the ioctl() function
+#include <cmath>			// for some math functions
+#include <unistd.h>			// for the read() and write() function
+#include <fcntl.h>			// for the open() function
+#include <cstdlib>			// for the exit() function
+#include <fstream>			// for some streaming functions...
+#include <time.h>			// for nanosleep() and time() function
+#include <sstream>			// for using string streams	
+#include <string.h>			// for manipulating strings
+#include <iomanip>			// for setw() and setfill() functions
 
 /*
  * Compiling with GCC, gives a fault because M_PI is not defined
@@ -29,9 +36,6 @@
 #ifndef true
 	#define true 1
 #endif
-
-#include <iostream>
-#include <fstream>
 
 using namespace std;
 
@@ -50,18 +54,6 @@ class HMC5883L
 		
 		int fd ;	// 'fd' stands for 'file descriptor'
 		unsigned char buf[16] ;
-
-		/* 
-		 * Find out which address the HMC5883L is on with the command : 
-		 * 'sudo i2cdetect -y 1' on a Raspberry Pi - model A, B rev 2 of B+
-		 * 'sudo i2cdetect -y 0' on a Raspberry Pi - model B rev 1
-		 * 1E => 0x1E 
-		 */
-		const int HMC5883L_I2C_ADDR = 0x1E ;
-
-		void selectDevice(int fd, int addr, char *name) ;
-	
-		void writeToDevice(int fd, int reg, int val) ;
 		
 	public:
 		HMC5883L(short xO, short yO, float declDegree, float declMinutes) ;
@@ -99,6 +91,8 @@ class HMC5883L
 		void updateData() ;
 		
 		void calibrateHMC5883L() ;
+		
+		void calibrateHMC5883L(int xOffs, int yOffs) ;
 } ;
 
 HMC5883L::HMC5883L(short xO, short yO, float declDegree, float declMinutes)
@@ -118,21 +112,38 @@ HMC5883L::HMC5883L(short xO, short yO, float declDegree, float declMinutes)
 	// on a Raspberry Pi - model B rev 1 use : '/dev/i2c-0'
 	{
 		// If it returns < 0 then something was wrong
-		fprintf(stderr, "Failed to open i2c bus\n") ;
+		printf("Failed to open i2c bus!\n") ;
 		// exit program with a 1 (failure)
 		exit(1) ;
 	}
 	else 
 	{
 		// successfull !
-		printf("Succesfully openend i2c bus\n") ;
+		printf("Succesfully openend i2c bus.\n") ;
 	}
 
 	/* 
 	 * Initialise the HMC5883L with the integer 'fd' that was returned from the 
 	 * open system call
+	 *
+	 * Find out which address the HMC5883L is on with the command : 
+	 * 'sudo i2cdetect -y 1' on a Raspberry Pi - model A, B rev 2 of B+
+	 * 'sudo i2cdetect -y 0' on a Raspberry Pi - model B rev 1
+	 * 1E => 0x1E 
 	 */
-	selectDevice(fd, HMC5883L_I2C_ADDR, "HMC5883L") ;
+		
+	/*
+	 * With the ioctl() function call we initialize the HMC3882L as 
+	 * a i2c slave on the address that we found with 
+	 * 'sudo i2cdetect -y 1' and declared in the integer HMC5883L_I2C_ADDR
+	 * see also : http://man7.org/linux/man-pages/man2/ioctl.2.html	 
+	 */
+	if (ioctl(fd, I2C_SLAVE, 0x1E) < 0)
+	{
+		// if ioctl() returns < 0 then we had a problem
+		printf("HMC5883L not present!\n") ;
+		exit(1) ;
+	}		
 
 	/* 
 	 * Now write some values to the HMC5883L to initalize it
@@ -143,14 +154,30 @@ HMC5883L::HMC5883L(short xO, short yO, float declDegree, float declMinutes)
 	 * 32 = Gain = 1090 Lsb/Gauss
 	 * We send the following byte : 00100000
 	 */
-	writeToDevice(fd, 0x01, 32) ;	// 0x01 = configuration register A
-    
+	char buf[2] ;
+	
+	buf[0]=0x01 ;	// 0x01 = configuration register A
+	buf[1]=32 ;		// value = 32
+
+	if (write(fd, buf, 2) != 2)
+	{
+		printf("Can't write to device!\n") ;
+		exit(1) ;
+	}
+	
 	/* 
 	 * Second write the value 0 to the mode register
 	 * 0 = Continuous-Measurement Mode
 	 * We send the following byte : 0000000
 	 */
-	writeToDevice(fd, 0x02, 0) ;	// 0x02 = Mode register
+	buf[0]=0x02 ;	// 0x02 = Mode register
+	buf[1]=0 ;		// value = 0
+	
+	if (write(fd, buf, 2) != 2)
+	{
+		printf("Can't write to device!\n") ;
+		exit(1) ;
+	}
 }
 	
 void HMC5883L::updateData()
@@ -160,7 +187,7 @@ void HMC5883L::updateData()
     if ((write(fd, buf, 1)) != 1)
     {
         // Send the register to read from
-        fprintf(stderr, "Error writing to i2c slave\n") ;
+        printf("Error writing to i2c slave!\n") ;
     }
 	else
 	{
@@ -169,7 +196,7 @@ void HMC5883L::updateData()
 
 	if (read(fd, buf, 6) != 6) 
 	{
-		fprintf(stderr, "Unable to read from HMC5883L\n") ;
+		printf("Unable to read from HMC5883L!\n") ;
 	} 
 	else 
 	{
@@ -217,27 +244,64 @@ void HMC5883L::updateData()
          */
 	}
 }		
-#endif /* HMC5883L_H */
 
 void HMC5883L::calibrateHMC5883L()
 {
+	timespec waitTime ;
+	
+	waitTime.tv_sec = 0	;
+	waitTime.tv_nsec = 100000000 ;		// = 0.1 seconds
+	
+	// Get the current date and time 
+	time_t result ; 
+	time(&result);
+	
+	// create a tm structure with the time info in it
+	struct tm *tmInfo ;
+	tmInfo = localtime(&result) ;
+    
 	// Reset the current offsets
 	xOffset = 0 ;
 	yOffset = 0 ;
 	
-	short minX = 0 ;
-	short maxX = 0 ;
-	short minY = 0 ;
-	short maxY = 0 ;
+	int minX = 0 ;
+	int maxX = 0 ;
+	int minY = 0 ;
+	int maxY = 0 ;
 	int i = 0 ;
 	
 	ofstream calibrationData ;
+	
+	// create a filename with date and time :
 	// This is the directory that is a samba share on my raspberry pi
-	calibrationData.open("/raspberry/calibration.dat") ;
+	const char *directory = "/raspberry/" ;
+	
+	// name of file is calibration + date + time with an extension ".dat"
+	const char *filename = "calibration" ;
+	const char *extension = ".dat" ;
+	stringstream fullFileName ;
+	
+	fullFileName << directory
+			<< filename 
+			<< 1900+tmInfo->tm_year 
+			<< setw(2) << setfill('0') << 1+tmInfo->tm_mon 
+			<< tmInfo->tm_mday << "-" 
+			<< setw(2) << setfill('0') << tmInfo->tm_hour 
+			<< setw(2) << setfill('0') << tmInfo->tm_min 
+			<< extension 
+			<< '\0' ;
+			
+	
+	calibrationData.open(fullFileName.str().c_str());
 	
 	if (calibrationData.is_open())
 	{
 		// File is successfully created and open for writing
+		printf("Opened the file %s for writing... \n", 
+				fullFileName.str().c_str()) ;
+		
+		// Put the current date and time in the calibration file
+		calibrationData << asctime(gmtime(&result)) ;
 	}
 	else
 	{
@@ -252,11 +316,13 @@ void HMC5883L::calibrateHMC5883L()
 			"start rotating the sensor.\n") ;
 	fflush(stdout) ;
 	getchar() ;
-		
+	
+	printf("Start turning!\n") ;
 	calibrationData << "\n " ;
 	
-	for (i=0; i<500; i++)
+	for (i=0; i<=500; i++)
 	{
+		printf("%d\n", i) ;
 		this->updateData() ;
 		
 		calibrationData << x ;
@@ -275,9 +341,14 @@ void HMC5883L::calibrateHMC5883L()
 
 		if (y > maxY)
 			maxY=y ;
-		delay(100) ;
+		
+		if (nanosleep(&waitTime, NULL) < 0) 
+		{
+			printf("Nanosleep failed!\n") ;
+		}
 	} 
 	
+	// write everything into the calibration file and close it for writing
 	calibrationData.close() ;
 
 	printf("minX: %d\n", minX) ;
@@ -296,37 +367,126 @@ void HMC5883L::calibrateHMC5883L()
 	getchar() ;
 }
 
-void HMC5883L::selectDevice(int fd, int addr, char* name)
+void HMC5883L::calibrateHMC5883L(int xOffs, int yOffs)
 {
-	/*
-	 * With the ioctl() function call we initialize the HMC3882L as 
-	 * a i2c slave on the address that we found with 
-	 * 'sudo i2cdetect -y 1' and declared in the integer HMC5883L_I2C_ADDR
-	 * see also : http://man7.org/linux/man-pages/man2/ioctl.2.html	 
-	 */
-	if (ioctl(fd, I2C_SLAVE, addr) < 0)
-	{
-		// if ioctl() returns < 0 then we had a problem
-		fprintf(stderr, "%s not present\n", name) ;
-		exit(1) ;
-	}	
-}
-
-void HMC5883L::writeToDevice(int fd, int reg, int val)
-{
-	//printf("reg = %d, val = %d\n", reg, val) ;
+	timespec waitTime ;
 	
-	char buf[2] ;
-	buf[0]=reg ;
-	buf[1]=val ;
-
-	if (write(fd, buf, 2) != 2)
+	waitTime.tv_sec = 0	;
+	waitTime.tv_nsec = 100000000 ;		// = 0.1 seconds
+	
+	// Get the current date and time 
+	time_t result ; 
+	time(&result);
+	
+	// create a tm structure with the time info in it
+	struct tm *tmInfo ;
+	tmInfo = localtime(&result) ;
+    
+	// Reset the current offsets
+	xOffset = xOffs ;
+	yOffset = yOffs ;
+	
+	int minX = 0 ;
+	int maxX = 0 ;
+	int minY = 0 ;
+	int maxY = 0 ;
+	int i = 0 ;
+	
+	ofstream calibrationData ;
+	
+	// create a filename with date and time :
+	// This is the directory that is a samba share on my raspberry pi
+	const char *directory = "/raspberry/" ;
+	
+	// name of file is calibration + date + time with an extension ".dat"
+	const char *filename = "calibration" ;
+	const char *extension = ".dat" ;
+	stringstream fullFileName ;
+	
+	fullFileName << directory
+			<< filename 
+			<< 1900+tmInfo->tm_year 
+			<< setw(2) << setfill('0') << 1+tmInfo->tm_mon 
+			<< tmInfo->tm_mday << "-" 
+			<< setw(2) << setfill('0') << tmInfo->tm_hour 
+			<< setw(2) << setfill('0') << tmInfo->tm_min 
+			<< extension 
+			<< '\0' ;
+			
+	
+	calibrationData.open(fullFileName.str().c_str());
+	
+	if (calibrationData.is_open())
 	{
-		fprintf(stderr, "Can't write to ADXL345\n") ;
-		exit(1) ;
+		// File is successfully created and open for writing
+		printf("Opened the file %s for writing... \n", 
+				fullFileName.str().c_str()) ;
+		
+		// Put the current date and time in the calibration file
+		calibrationData << asctime(gmtime(&result)) ;
 	}
 	else
 	{
-		//printf("Wrote : %s\n", buf) ;
+		printf("Failed to open file for calibration... \n") ;
 	}
+	
+	printf("Calibration :\n\n") ;
+	printf("When you start the calibration rotate the sensor "
+			"from left to right and vice versa.\n") ;
+	printf("This takes about 1 minute!\n") ;
+	printf("Press any key to start the calibration and "
+			"start rotating the sensor.\n") ;
+	fflush(stdout) ;
+	getchar() ;
+	
+	printf("Start turning!\n") ;
+	calibrationData << "\n " ;
+	
+	for (i=0; i<=500; i++)
+	{
+		printf("%d\n", i) ;
+		this->updateData() ;
+		
+		calibrationData << x ;
+		calibrationData << " " ;
+		calibrationData << y ;
+		calibrationData << "\n " ;
+		
+		if (x < minX)
+			minX = x ;
+
+		if (y < minY)
+			minY=y ;
+
+		if (x > maxX)
+			maxX=x ;
+
+		if (y > maxY)
+			maxY=y ;
+		
+		if (nanosleep(&waitTime, NULL) < 0) 
+		{
+			printf("Nanosleep failed!\n") ;
+		}
+	} 
+	
+	// write everything into the calibration file and close it for writing
+	calibrationData.close() ;
+
+	printf("minX: %d\n", minX) ;
+	printf("minY: %d\n", minY) ;
+	printf("maxX: %d\n", maxX) ;
+	printf("maxY: %d\n\n", maxY) ;
+	
+	xOffset = (maxX + minX) / 2 ;
+	yOffset = (maxY + minY) / 2 ;
+	
+	printf("x offset : %d\n", xOffset) ;
+	printf("Y offset : %d\n", yOffset) ;
+	printf("Write these offsets down and use them in the constructor!\n") ;
+	
+	fflush(stdout) ;
+	getchar() ;
 }
+
+#endif /* HMC5883L_H */
