@@ -44,45 +44,50 @@
  * Created on 06 november 2016, 12:52
  */
 
+
 #include <stdio.h>
 #include <cstdlib>
 #include <fcntl.h>
 #include <unistd.h>
 #include <string.h>
+#include <time.h>
 
 #include <wiringPi.h>
 #include <softPwm.h>
+#include <wiringSerial.h>
+
 #include <sys/ioctl.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <linux/i2c-dev.h>
 
-#include <math.h>
+#include <cmath>
 
 
-// #include "HMC588L_mit.h"
+#include "serialcomm.h"
 #include "HMC5883L.h"
 #include "L298HN.h"
 
 int main(int argc, char** argv)
 {
+	clock_t t;
+	
 	// Disable buffering on stdout
 	// If we do not do this the printf() statement does not 
 	// show our text in the terminal. Our text will go directly to the stdout.
 	setbuf(stdout, NULL);
 	
-	// Setup WiringPi
-	wiringPiSetup() ;
-	
-	// do some initialisations for the motors
+	// initialize the bluetooth serial communication
+	serial bluetooth ;
+	bluetooth.openSerialPort("/dev/rfcomm0") ;
+				
+	// initialize motor driver
 	L298HN motors ;
-	motors.setupMotors() ;
 	
 	// initialize the compass
 	HMC5883L compass(280, 285, 0, 35) ;
-	compass.updateData() ;
 	
-	float setpointAngle = compass.getAngle() ;
+	float setpointAngle = 0.0f ;
 	float currentAngle = 0.0f ;
 	float previousAngle = 0.0f ;
 	
@@ -93,62 +98,186 @@ int main(int argc, char** argv)
 	float I = 0.0f ;
 	float D = 0.0f ;
 	
-	float kP = 20.0f ;
-	float kI = 10.0f ;
+	float kP = 40.0f ;
+	float kI = 0.0f ;
 	float kD = 0.0f ;
 	
 	float drive = 0.0f ;
 	float scaleFactor = 1 ;
 	
-	float speed = 10.0f ;
+	float speed = 0.0f ;
+		
+	int i = 0 ;
 	
-	/*
-	while (1)
+	bool firstForward = false ;
+	
+	enum States
 	{
-		compass.updateData() ;
-		
-		currentAngle = compass.getAngle() ;
-		printf("Current angle = %0.2f.\n", currentAngle) ;
-		printf("Setpoint angle = %0.2f.\n", setpointAngle) ;
-		
-		errorAngle = setpointAngle - currentAngle ;
-		printf("Error angle = %0.2f.\n", errorAngle) ;
-		
-		P = errorAngle * kP ;
-		printf("P = %0.2f.\n", P) ;
-		D = ((previousAngle - currentAngle) / 0.1 )* kD ;
-		printf("D = %0.2f.\n", D) ;
-		
-		drive = P + D * 25 ;
-		printf("Drive = %0.2f.\n", drive) ;
-		
-		previousErrorAngle = errorAngle ;
-		
-		/*
-		if (drive > 0)
-		{
-			motors.forward(1, speed) ;
-			motors.forward(2, speed+abs(drive)) ;
-		}
-		else
-		{
-			motors.forward(1, speed+abs(drive)) ;
-			motors.forward(2, speed) ;
-		}
-		 
-		
-		//motors.stop(1) ;
-		//motors.stop(2) ;
-		
-		printf("\n\n") ;
-		delay(100) ;
-		//fflush(stdout) ;
-		//getchar() ;
-	}
-	 */
-
-	compass.calibrateHMC5883L() ;
+		STATE_INITIALIZE,
+		STATE_STOP,
+		STATE_NOTHING,
+		STATE_START_FORWARD,
+		STATE_START_REVERSE,
+		STATE_START_LEFT90,
+		STATE_FORWARD,
+		STATE_REVERSE,
+		STATE_CHANGE_PARAM
+	};
 	
-	return 0;
+	States roboState ;
+	
+	roboState = STATE_INITIALIZE ;
+	
+	while (1)
+	{		
+		t=clock() ;
+		switch (roboState)
+			{
+			case STATE_INITIALIZE:
+				printf("State : Initializing...\n") ;
+					
+				// Setup WiringPi
+				wiringPiSetup() ;
+		
+				// do some initialisations for the motors
+				motors.setupMotors() ;
+				speed = 10.0f ;
+			
+				// update the compass
+				compass.updateData() ;
+	
+				setpointAngle = compass.getAngle() ;
+						
+				roboState = STATE_STOP ;
+			
+				break ;	
+		
+			case STATE_STOP:
+				printf("State : Stopping...\n") ;
+				motors.stop(1) ;
+				motors.stop(2) ;
+				
+				roboState = STATE_NOTHING ;
+				break ;
+				
+			case STATE_NOTHING:
+				//printf("State : Doing nothing, please give a command...\n") ;
+				break ;
+				
+			case STATE_START_FORWARD:
+				printf("State : Starting forward...\n") ;
+				setpointAngle = compass.getAngle() ;
+				printf("Setpoint angle = %0.2f.\n", setpointAngle) ;
+				roboState = STATE_FORWARD ;
+				break ;
+				
+			case STATE_FORWARD:
+				printf("State : Forward...\n") ;
+				// Update compass data
+				compass.updateData() ;
+				
+				currentAngle = compass.getAngle() ;
+				printf("Current angle = %0.2f.\n", currentAngle) ;
+				printf("Setpoint angle = %0.2f.\n", setpointAngle) ;
+		
+				errorAngle = setpointAngle - currentAngle ;
+				printf("Error angle = %0.2f.\n", errorAngle) ;
+		
+				P = errorAngle * kP ;
+				printf("P = %0.2f.\n", P) ;
+				D = ((errorAngle - previousErrorAngle) / 0.1) * kD ;
+				printf("D = %0.2f.\n", D) ;
+		
+				drive = P + D * 25 ;
+				printf("Drive = %0.2f.\n", drive) ;
+				
+				if (drive > 0)
+				{
+					motors.forward(1, speed) ;
+					motors.forward(2, speed+abs(drive)) ;
+				}
+				else
+				{
+					motors.forward(1, speed+abs(drive)) ;
+					motors.forward(2, speed) ;
+				}
+				
+				previousErrorAngle = errorAngle ;
+								
+				break ;
+				
+			case STATE_START_REVERSE:
+				printf("State : Starting reverse...\n") ;
+				roboState = STATE_REVERSE ;
+				
+				break ;
+				
+			case STATE_REVERSE:
+				printf("State : Reverse...\n") ;
+				break ;
+			
+			case STATE_START_LEFT90:
+				printf("State : Turning left 90°...\n") ;
+				setpointAngle = compass.getAngle() + 90.0f ;
+				
+				if (setpointAngle > 360)
+					setpointAngle = setpointAngle - 360 ;
+				
+				roboState = STATE_FORWARD ;
+				
+				break ;
+			}
+		
+		// if something is available, read from the bluetooth port 
+		if (bluetooth.checkBuffer(100))
+		{
+			bluetooth.readSerialPort() ; 
+			
+			printf("Incoming command : ") ;
+			bluetooth.printSerialPort() ;
+			printf("\n") ;
+		
+			if (bluetooth.getBuffer()=="stop\n")
+			{
+				printf("Received stop command.\n") ;
+				roboState = STATE_STOP ;
+				bluetooth.flushBuffer() ;
+			}
+			else if (bluetooth.getBuffer()=="forward\n")
+			{
+				printf("Received forward command.\n") ;
+				roboState = STATE_START_FORWARD;
+				bluetooth.flushBuffer() ;
+			}
+			else if (bluetooth.getBuffer()=="reverse\n")
+			{
+				printf("Received reverse command.\n") ;
+				roboState = STATE_START_REVERSE;
+				bluetooth.flushBuffer() ;
+			}
+			else if (bluetooth.getBuffer()=="turnleft90\n")
+			{
+				printf("Received turn left 90°.\n") ;
+				roboState = STATE_START_LEFT90 ;
+				bluetooth.flushBuffer() ;
+			}
+			else
+			{
+				printf("Nothing received or no correct command received!\n") ;
+				// Do nothing, do not change state!
+				bluetooth.flushBuffer() ;
+			}
+		}
+		t = clock() -t ;
+		
+		//printf("%f seconds...\n", ((float)t)/CLOCKS_PER_SEC) ;
+		delay(100) ;
+	}	
+	
+	//fflush(stdout) ;
+	//getchar() ;
+	 
+	// compass.calibrateHMC5883L() ;
+	
+	return 0; 
 }
-
