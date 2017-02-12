@@ -44,26 +44,6 @@
  * Created on 06 november 2016, 12:52
  */
 
-
-#include <stdio.h>
-#include <cstdlib>
-#include <fcntl.h>
-#include <unistd.h>
-#include <string.h>
-#include <time.h>
-
-#include <wiringPi.h>
-#include <softPwm.h>
-#include <wiringSerial.h>
-
-#include <sys/ioctl.h>
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <linux/i2c-dev.h>
-
-#include <cmath>
-
-
 #include "serialcomm.h"
 #include "HMC5883L.h"
 #include "L298HN.h"
@@ -86,6 +66,7 @@ int main(int argc, char** argv)
 	
 	// initialize the compass
 	HMC5883L compass(280, 285, 0, 35) ;
+	
 	
 	float setpointAngle = 0.0f ;
 	float currentAngle = 0.0f ;
@@ -277,7 +258,7 @@ int main(int argc, char** argv)
 	//fflush(stdout) ;
 	//getchar() ;
 	 
-	// compass.calibrateHMC5883L() ;
+	 compass.calibrateHMC5883L() ;
 	
 	return 0; 
 }
