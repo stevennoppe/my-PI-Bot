@@ -1,30 +1,38 @@
 #include "L298HN.h"
 
-void L298HN::forward(int motor, int percentage)
+void L298HN::forward(int motor, int speed)
 {
-	// Check parameter 'percentage'
-	if (percentage < 0 | percentage > 100)
+	// Check parameter 'speed'
+	if (speed < 0)
 	{
-		printf("The percentage of speed of the motors must be between ") ;
-		printf("0 and 100 percentage! Setting it to default.\n") ;
-		// set percentage to default value = 100 %
-		percentage = 100 ;
+		printf("The value of the speed of the motors must be higher ") ;
+		printf("then 0! Setting it to 0.\n") ;
+		speed = 0 ;
+	}
+	
+	if (speed > 255)
+	{
+		printf("The value of the  speed of the motors must be lower ") ;
+		printf("then 255! Setting it to 255.\n") ;
+		speed = 255 ;
 	}
 	
 	switch(motor)
 	{
 		case 1:
-			printf("Forward motor 1 (%d percent)...\n", percentage) ;
-			// set pwm of ENB to given percentage
-			softPwmWrite(ENA, percentage) ;	
+			printf("Forward motor 1 (%d)...\n", speed) ;
+			// set pwm of ENB to given speed
+			softPwmWrite(ENA, speed) ;	
 			// set EN1 to high and EN2 to low (forward motor 1)
 			digitalWrite(EN1, HIGH) ;
 			digitalWrite(EN2, LOW) ;
+			
 			break ;
+		
 		case 2:
-			printf("Forward motor 2 (%d percent)...\n", percentage) ;
-			// set pwm of ENB to given percentage
-			softPwmWrite(ENB, percentage) ;	
+			printf("Forward motor 2 (%d)...\n", speed) ;
+			// set pwm of ENB to given speed
+			softPwmWrite(ENB, speed) ;	
 			// set EN3 to high and EN4 to low (forward motor 2)
 			digitalWrite(EN3, HIGH) ;
 			digitalWrite(EN4, LOW) ;
@@ -34,31 +42,37 @@ void L298HN::forward(int motor, int percentage)
 	}
 }
 
-void L298HN::reverse(int motor, int percentage)
+void L298HN::reverse(int motor, int speed)
 {
-	// Check parameter 'percentage'
-	if (percentage < 0 | percentage > 100)
+	// check speed
+	if (speed < 0)
 	{
-		printf("The percentage of speed of the motors must be between ") ;
-		printf("0 and 100 percentage! Setting it to default.\n") ;
-		// set percentage to default value = 100 %
-		percentage = 100 ;
+		printf("The value of the speed of the motors must be higher ") ;
+		printf("then 0! Setting it to 0.\n") ;
+		speed = 0 ;
+	}
+	
+	if (speed > 255)
+	{
+		printf("The value of the speed of the motors must be lower ") ;
+		printf("then 255! Setting it to 255.\n") ;
+		speed = 255 ;
 	}
 	
 	switch(motor)
 	{
 		case 1:
-			printf("Reverse motor 1 (%d percent)...\n", percentage) ;
+			printf("Reverse motor 1 (%d)...\n", speed) ;
 			// set pwm of ENB to given percentage
-			softPwmWrite(ENA, percentage) ;	
+			softPwmWrite(ENA, speed) ;	
 			// set EN1 to low and EN2 to high (reverse motor 1)
 			digitalWrite(EN1, LOW) ;
 			digitalWrite(EN2, HIGH) ;
 			break ;
 		case 2:
-			printf("Reverse motor 2 (%d percent)...\n", percentage) ;
-			// set pwm of ENB to given percentage
-			softPwmWrite(ENB, percentage) ;	
+			printf("Reverse motor 2 (%d)...\n", speed) ;
+			// set pwm of ENB to given speed
+			softPwmWrite(ENB, speed) ;	
 			// set EN3 to low and EN4 to high (reverse motor 2)
 			digitalWrite(EN3, LOW) ;
 			digitalWrite(EN4, HIGH) ;
@@ -90,8 +104,8 @@ void L298HN::stop(int motor)
 void L298HN::setupMotors()
 {
 	// Initialise the pins as PWM with an initial value of 100 % from 100 %
-	softPwmCreate(ENA, 100, 100) ;	
-	softPwmCreate(ENB, 100, 100) ;	
+	softPwmCreate(ENA, 255, 255) ;	
+	softPwmCreate(ENB, 255, 255) ;	
 		
 	// Initialise the pins as output
 	pinMode(EN1, OUTPUT) ;			

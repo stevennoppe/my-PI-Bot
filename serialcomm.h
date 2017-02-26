@@ -44,6 +44,7 @@ class serial
 public:
 	int openSerialPort(string port) ;
 	int readSerialPort() ;
+	int writeSerialPort(char const *string) ;
 	void printSerialPort() ;
 	string getBuffer() ;
 	void restoreOldParam() ;
@@ -51,9 +52,9 @@ public:
 	void flushBuffer() ;
 	
 private:
-	int fd, c, res;
-	struct termios oldtio,newtio;
-	char buf[255];	
+	int fd, c ;
+	struct termios oldtio,newtio ;
+	char buf[255] ;	
 } ;
 
 

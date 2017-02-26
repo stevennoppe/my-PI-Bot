@@ -51,11 +51,10 @@
 class L298HN
 {
 	private:
-	
 		
 	public:
-		void forward(int motor, int percentage) ;
-		void reverse(int motor, int percentage) ;
+		void forward(int motor, int speed) ;
+		void reverse(int motor, int speed) ;
 		void stop(int motor) ;
 		void setupMotors() ;
 } ;

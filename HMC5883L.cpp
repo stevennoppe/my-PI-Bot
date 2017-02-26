@@ -242,7 +242,7 @@ void HMC5883L::calibrateHMC5883L()
 		if (y > maxY)
 			maxY=y ;
 		
-		dn.waitMicroSec(100) ;				// wait 0.1 seconds
+		dn.waitMilliSec(100) ;				// wait 0.1 seconds
 	} 
 	
 	// write everything into the calibration file and close it for writing
@@ -356,7 +356,7 @@ void HMC5883L::calibrateHMC5883L(int xOffs, int yOffs)
 		if (y > maxY)
 			maxY=y ;
 		
-		dn.waitMicroSec(100) ;				// wait 0.1 seconds
+		dn.waitMilliSec(100) ;				// wait 0.1 seconds
 	} 
 	
 	// write everything into the calibration file and close it for writing

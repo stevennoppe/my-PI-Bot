@@ -3,7 +3,7 @@
 int serial::openSerialPort(string port)
 {
 	/* 
-     Open modem device for reading and writing and not as controlling tty
+     Open serial device for reading and writing and not as controlling tty
      because we don't want to get killed if linenoise sends CTRL-C.
      */
     fd = open(port.c_str(), O_RDWR | O_NOCTTY ) ; 
@@ -70,7 +70,7 @@ int serial::openSerialPort(string port)
 	newtio.c_cc[VEOL2]    = 0;     /* '\0' */
         
     /* 
-     now clean the modem line and activate the settings for the port
+     now clean the serial line and activate the settings for the port
     */
     tcflush(fd, TCIFLUSH);
     tcsetattr(fd,TCSANOW,&newtio);
@@ -87,12 +87,30 @@ int serial::readSerialPort()
      subsequent reads will return the remaining chars. res will be set
      to the actual number of characters actually read 
 	*/
-	res = read(fd,buf,255) ;
-	buf[res]=0;
+	int result = read(fd, buf, 255) ;
+	buf[result] = 0 ;
 	
-	tcflush(fd, TCIOFLUSH);
+	tcflush(fd, TCIFLUSH) ;
 
-	return res ;
+	return result ;
+}
+
+ssize_t serial::writeSerialPort(char const *string)
+{
+	/*
+	 write a string to the serial connection
+	 */
+	
+	ssize_t result = write(fd, string, strlen(string)) ;
+	
+	tcdrain(fd);
+	
+	/*if (result != strlen(string))
+		printf("Failed to write to serial port!\n") ;
+	else
+		printf("Wrote to serial port!\n") ;
+	*/
+	return result ;
 }
 
 void serial::printSerialPort()
